@@ -1,0 +1,65 @@
+{
+  "ship": {
+    "turnRate": 3.0,
+    "accel": 150,
+    "decel": 200,
+    "maxSpeed": 400,
+    "minSpeed": 0
+  },
+  "bullets": {
+    "speed": 1500,
+    "cooldown": 100,
+    "cellSize": 6
+  },
+  "weapons": {
+    "bullet": {
+      "maxAmmo": 30,
+      "startAmmo": 10,
+      "parallelStreams": 1,
+      "streamsPerUpgrade": 1,
+      "spacing": 14,
+      "ammoPerUpgrade": 5
+    },
+    "wave": {
+      "maxAmmo": 5,
+      "startAmmo": 3,
+      "baseRadius": 120,
+      "radiusPerUpgrade": 40,
+      "speed": 300,
+      "cooldown": 400,
+      "initialRadius": 8,
+      "radiusStep": 12,
+      "ammoPerUpgrade": 1
+    }
+  },
+  "powerups": {
+    "maxOnScreen": 3,
+    "spawnInterval": 4000,
+    "scoreBonus": 50,
+    "lifeChance": 0.3,
+    "livesStart": 3,
+    "livesMax": 5
+  },
+  "blocks": {
+    "baseSpeed": 40,
+    "speedFactor": 2,
+    "countBase": 8,
+    "countPerLevel": 2
+  },
+  "enemyBullets": {
+    "speed": 350,
+    "shotInterval": 2500,
+    "intervalDecayPerKill": 300,
+    "minInterval": 800
+  },
+  "asteroids": {
+    "maxDivisions": 4,
+    "sizes": [64, 42, 28, 16],
+    "baseSpeed": 70,
+    "maxOnScreen": 12,
+    "spawnInterval": 6000
+  },
+  "level": {
+    "speedMultiplierPerLevel": 0.25
+  }
+}
