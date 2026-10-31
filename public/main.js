@@ -314,6 +314,34 @@ function fallbackSaveScores() {
   localStorage.setItem('scoreHistory', JSON.stringify(scoreHistory));
 }
 
+// Enregistre le score de la partie courante dans l'historique (avec difficulté, niveau, date),
+// en ne gardant que les 5 meilleurs scores par difficulté.
+function recordScore() {
+  scoreHistory.push({
+    score: score,
+    level: level,
+    difficulty: difficulty,
+    date: new Date().toISOString(),
+  });
+  // Garder seulement les 5 meilleurs scores par difficulté
+  for (const d of ['facile', 'normal', 'difficile']) {
+    const entries = scoreHistory.filter((s) => s.difficulty === d).sort((a, b) => b.score - a.score);
+    const keep = new Set(entries.slice(0, 5));
+    scoreHistory = scoreHistory.filter((s) => keep.has(s));
+  }
+  if (score > bestScore) {
+    bestScore = score;
+  }
+  saveScores();
+}
+
+// Réinitialise les scores (meilleur score + historique) et sauvegarde l'état vide
+function resetScores() {
+  bestScore = 0;
+  scoreHistory = [];
+  saveScores();
+}
+
 // Appeler la fonction de chargement au démarrage
 loadScores();
 
@@ -954,21 +982,8 @@ function damageShip() {
 
   if (lives <= 0) {
     gameOver = true;
-    // Enregistrer le score dans l'historique
-    scoreHistory.push({
-      score: score,
-      level: level,
-      date: new Date().toISOString(),
-    });
-    // Garder seulement les 10 derniers scores
-    if (scoreHistory.length > 10) {
-      scoreHistory = scoreHistory.slice(-10);
-    }
-    if (score > bestScore) {
-      bestScore = score;
-    }
-    // Sauvegarder les scores (Tauri ou localStorage)
-    saveScores();
+    // Enregistrer le score dans l'historique (avec la difficulté de la partie)
+    recordScore();
   } else {
     // Le vaisseau respawnera après l'animation d'explosion
     ship.speed = 0;
@@ -1078,9 +1093,11 @@ function update(dt, now) {
   }
 
   if (gameOver) {
-    // Attendre Space ou clic pour redémarrer
+    // Attendre Space ou clic pour retourner à l'écran d'entrée
     if (keys.has('Space')) {
-      resetGame();
+      gameStarted = false;
+      gameOver = false;
+      keys.clear();
     }
     return;
   }
@@ -1502,26 +1519,43 @@ function drawHUD() {
     const tw1 = ctx.measureText(title1).width;
     ctx.fillText(title1, (canvas.width - tw1) / 2, canvas.height / 3);
 
-    // Meilleur score
+    // Meilleur score global
     ctx.font = 'bold 20px monospace';
     ctx.fillStyle = '#ffff00';
     ctx.shadowColor = '#ffff00';
     ctx.shadowBlur = 8;
     const bestText = `Meilleur Score: ${bestScore}`;
     const tw3 = ctx.measureText(bestText).width;
-    ctx.fillText(bestText, (canvas.width - tw3) / 2, canvas.height / 2);
+    ctx.fillText(bestText, (canvas.width - tw3) / 2, canvas.height * 0.42);
 
-    // Historique des scores (si disponible)
-    if (scoreHistory.length > 0) {
+    // 3 listes de meilleurs scores, une par difficulté (affichée selon la difficulté sélectionnée)
+    const diffNames = { facile: 'Facile', normal: 'Normal', difficile: 'Difficile' };
+    const entries = scoreHistory.filter((s) => (s.difficulty || 'normal') === difficulty);
+    const top5 = [...entries].sort((a, b) => b.score - a.score).slice(0, 5);
+    if (top5.length > 0) {
+      ctx.font = 'bold 16px monospace';
+      ctx.fillStyle = '#33ff66';
+      ctx.shadowColor = '#33ff66';
+      ctx.shadowBlur = 6;
+      const header = `Meilleurs scores — ${diffNames[difficulty]}`;
+      const hw = ctx.measureText(header).width;
+      ctx.fillText(header, (canvas.width - hw) / 2, canvas.height * 0.46);
+
       ctx.font = '16px monospace';
-      ctx.fillStyle = '#aaaaaa';
-      ctx.shadowBlur = 0;
-      const historyText = `Derniers scores: ${scoreHistory.map(s => s.score).join(', ')}`;
-      const tw4 = ctx.measureText(historyText).width;
-      ctx.fillText(historyText, (canvas.width - tw4) / 2, canvas.height / 2 + 30);
+      ctx.textAlign = 'center';
+      let ly = canvas.height * 0.5;
+      for (let i = 0; i < top5.length; i++) {
+        const s = top5[i];
+        const dateStr = s.date ? new Date(s.date).toLocaleDateString('fr-FR') : '';
+        ctx.fillStyle = i === 0 ? '#ffff66' : '#aaaaaa';
+        ctx.shadowBlur = 0;
+        ctx.fillText(`${i + 1}. ${s.score} pts — Niveau ${s.level || 1}${dateStr ? ' — ' + dateStr : ''}`, canvas.width / 2, ly);
+        ly += 22;
+      }
+      ctx.textAlign = 'start';
     }
 
-    // Choix de la difficulté (touches 1/2/3), puis ESPACE pour commencer
+    // Choix de la difficulté (touches 1/2/3), descendu sous la liste des scores
     if (LEVELS.length > 0) {
       ctx.font = 'bold 20px monospace';
       const diffLabels = { facile: '1. Facile', normal: '2. Normal', difficile: '3. Difficile' };
@@ -1531,7 +1565,7 @@ function drawHUD() {
         ctx.fillStyle = difficulty === d ? '#33ff66' : '#aaaaaa';
         ctx.shadowColor = ctx.fillStyle;
         ctx.shadowBlur = 8;
-        ctx.fillText(label, dx, canvas.height * 0.58);
+        ctx.fillText(label, dx, canvas.height * 0.68);
         dx += ctx.measureText(label).width + 40;
       }
     }
@@ -1545,7 +1579,7 @@ function drawHUD() {
       ? `Touches 1/2/3 : difficulté — ESPACE pour commencer (${TOTAL_LEVELS()} niveaux)`
       : 'Appuyez sur ESPACE pour commencer';
     const tw5 = ctx.measureText(instruction).width;
-    ctx.fillText(instruction, (canvas.width - tw5) / 2, canvas.height * 0.7);
+    ctx.fillText(instruction, (canvas.width - tw5) / 2, canvas.height * 0.78);
 
     ctx.restore();
     return;
@@ -1601,11 +1635,21 @@ function drawHUD() {
     const text = 'GAME OVER';
     const tw = ctx.measureText(text).width;
     ctx.fillText(text, (canvas.width - tw) / 2, canvas.height / 2);
-    ctx.font = '18px monospace';
+
+    // Score final et niveau atteint
+    ctx.font = 'bold 22px monospace';
     ctx.fillStyle = '#ffffff';
-    const hint = 'Appuyez sur Espace pour rejouer';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 8;
+    const finalText = `Score: ${score} — Niveau atteint: ${level}/${TOTAL_LEVELS()}`;
+    const fw = ctx.measureText(finalText).width;
+    ctx.fillText(finalText, (canvas.width - fw) / 2, canvas.height / 2 + 40);
+
+    ctx.font = '18px monospace';
+    ctx.fillStyle = '#aaaaaa';
+    const hint = 'Appuyez sur Espace pour revenir à l\'écran d\'entrée';
     const hw = ctx.measureText(hint).width;
-    ctx.fillText(hint, (canvas.width - hw) / 2, canvas.height / 2 + 40);
+    ctx.fillText(hint, (canvas.width - hw) / 2, canvas.height / 2 + 75);
   }
   ctx.restore();
 }
@@ -1672,6 +1716,26 @@ window.__debug = {
   },
   get bestScore() {
     return bestScore;
+  },
+  get scoreHistory() {
+    return scoreHistory;
+  },
+  get started() {
+    return gameStarted;
+  },
+  // Permet aux tests de simuler un dégât au vaisseau (perd une vie, game over à 0).
+  // Appliqué immédiatement : les collisions normales sont gérées par update(), mais ce
+  // hook est direct pour ne pas dépendre du timing des frames dans les tests.
+  damageShip() {
+    damageShip();
+  },
+  // Réinitialise les scores enregistrés (meilleur score + historique)
+  resetScores() {
+    resetScores();
+  },
+  // Enregistre le score de la partie courante dans l'historique (pour les tests)
+  recordScore() {
+    recordScore();
   },
   get powerups() {
     return powerups.map((p) => ({ x: p.x, y: p.y, r: p.r, type: p.type }));

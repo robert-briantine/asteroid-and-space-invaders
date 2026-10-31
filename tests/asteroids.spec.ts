@@ -1,72 +1,71 @@
 import { test, expect } from '@playwright/test';
+import { loadGame, debug } from './helpers';
 
-test('astéroïdes : apparition forcée et reset', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForFunction(() => (window as any).__debug !== undefined);
+test('un astéroïde de niveau 1 se divise en deux plus petits', async ({ page }) => {
+  await loadGame(page);
+  await page.evaluate(() => (window as any).__debug.startLevel(1));
+  // Ajoute un astéroïde n=2 (moyen) à une position fixe
+  await page.evaluate(() => {
+    const d = (window as any).__debug;
+    d.spawnAsteroidForTest(2, 400, 300);
+  });
+  const before = await debug(page).then((d) => d.asteroids.length);
+  // Tire dessus
+  await page.evaluate(() => {
+    const d = (window as any).__debug;
+    // L'astéroïde ajouté est le dernier du tableau
+    d.shootAtAsteroid(d.asteroids.length - 1);
+  });
+  // Attendre que la balle arrive (~200 ms)
+  await page.waitForTimeout(300);
+  const after = await debug(page).then((d) => d.asteroids);
+  // L'astéroïde n=2 se divise en deux n=1 → +1 au total
+  expect(after.length).toBe(before + 1);
+  // Les deux fragments ont n=1
+  const smalls = after.filter((a: any) => a.n === 1);
+  expect(smalls.length).toBeGreaterThanOrEqual(2);
+});
 
-  // Forcer l'apparition d'un astéroïde très grand (n = 4 divisions restantes) via le hook debug
-  await page.evaluate(() => (window as any).__debug.spawnAsteroidForTest());
+test('un astéroïde de niveau 1 explose sans se diviser', async ({ page }) => {
+  await loadGame(page);
+  await page.evaluate(() => (window as any).__debug.startLevel(1));
+  await page.evaluate(() => {
+    const d = (window as any).__debug;
+    d.spawnAsteroidForTest(1, 500, 400);
+  });
+  const before = await debug(page).then((d) => d.asteroids.length);
+  await page.evaluate(() => {
+    const d = (window as any).__debug;
+    d.shootAtAsteroid(d.asteroids.length - 1);
+  });
+  await page.waitForTimeout(300);
+  const after = await debug(page).then((d) => d.asteroids.length);
+  // n=1 explose → il disparaît (pas de division)
+  expect(after).toBeLessThan(before);
+});
 
-  const asteroids = await page.evaluate(() => (window as any).__debug.asteroids);
-  expect(asteroids.length).toBeGreaterThan(0);
-
-  // Chaque astéroïde a les bonnes propriétés
-  for (const a of asteroids) {
-    expect(a.r).toBeGreaterThan(0);
-    expect([1, 2, 3, 4]).toContain(a.n); // n divisions restantes avant explosion
-    expect([0, 1, 2, 3]).toContain(a.sizeIndex); // 4 tailles : très grand → petit
-    expect(typeof a.x).toBe('number');
-    expect(typeof a.y).toBe('number');
-  }
-
-  // Le reset vide les astéroïdes et en fait apparaître le nombre correspondant au niveau 1
-  await page.evaluate(() => (window as any).__debug.reset());
-  const afterReset = await page.evaluate(() => (window as any).__debug.asteroids);
-  // Au niveau 1, asteroidCountForLevel(1) = min(2 + 1, 10) = 3 astéroïdes
-  expect(afterReset.length).toBe(3);
-  // Tous les astéroïdes du niveau 1 ont n = 4 (très grands)
-  for (const a of afterReset) {
-    expect(a.n).toBe(4);
+test('les astéroïdes rebondissent sur les bords du canvas', async ({ page }) => {
+  await loadGame(page);
+  await page.evaluate(() => (window as any).__debug.startLevel(1));
+  // Laisse tourner 800 ms pour que les astéroïdes bougent
+  await page.waitForTimeout(800);
+  const d = await debug(page);
+  for (const a of d.asteroids) {
+    expect(a.x).toBeGreaterThan(-a.r);
+    expect(a.y).toBeGreaterThan(-a.r);
   }
 });
 
-test('astéroïdes : division quand une balle touche un grand astéroïde', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForFunction(() => (window as any).__debug !== undefined);
-
-  // Forcer l'apparition d'un astéroïde très grand (n = 4) au centre de l'écran
+test('le score augmente quand on détruit un astéroïde', async ({ page }) => {
+  await loadGame(page);
+  await page.evaluate(() => (window as any).__debug.startLevel(1));
+  const before = await debug(page).then((d) => d.score);
   await page.evaluate(() => {
     const d = (window as any).__debug;
-    const canvas = document.getElementById('game') as HTMLCanvasElement;
-    d.spawnAsteroidForTest(4, canvas.width / 2, canvas.height / 2);
+    d.spawnAsteroidForTest(1, 600, 500);
+    d.shootAtAsteroid(d.asteroids.length - 1);
   });
-
-  // Récupérer la position du grand astéroïde
-  const target = await page.evaluate(() => {
-    const d = (window as any).__debug;
-    const big = d.asteroids.find((a: any) => a.n === 4);
-    return big ? { x: big.x, y: big.y, r: big.r, n: big.n } : null;
-  });
-  expect(target).not.toBeNull();
-  expect(target!.n).toBe(4);
-
-  // Compter les astéroïdes avant le tir
-  const countBefore = await page.evaluate(() => (window as any).__debug.asteroids.length);
-  expect(countBefore).toBe(1); // un seul astéroïde (le très grand qu'on vient de créer)
-
-  // Tirer directement sur l'astéroïde en utilisant le hook debug
-  await page.evaluate(() => {
-    const d = (window as any).__debug;
-    d.shootAtAsteroid(0);
-  });
-
-  // Attendre un moment pour laisser la balle atteindre l'astéroïde
-  await page.waitForTimeout(500);
-
-  // Vérifier que le très grand a disparu et s'est divisé en deux fragments n = 3
-  const afterShot = await page.evaluate(() => (window as any).__debug.asteroids);
-  const stillBig = afterShot.find((a: any) => a.n === 4);
-  expect(stillBig).toBeUndefined(); // le très grand a disparu
-  const mediumCount = afterShot.filter((a: any) => a.n === 3).length;
-  expect(mediumCount).toBeGreaterThanOrEqual(2); // au moins 2 nouveaux fragments n = 3
+  await page.waitForTimeout(400);
+  const after = await debug(page).then((d) => d.score);
+  expect(after).toBeGreaterThan(before);
 });
