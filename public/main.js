@@ -24,9 +24,24 @@ let CONFIG = {
   level: { speedMultiplierPerLevel: 0.25 },
 };
 
-fetch('./config.json')
-  .then((r) => r.ok ? r.json() : null)
-  .then((data) => { if (data) CONFIG = data; })
+// --- Niveaux définis dans levels.json (20 niveaux, déterministes pour l'entraînement) ---
+let LEVELS = [];
+const TOTAL_LEVELS = () => LEVELS.length || 1;
+
+Promise.all([
+  fetch('./config.json'),
+  fetch('./levels.json'),
+])
+  .then(([cr, lr]) => Promise.all([
+    cr.ok ? cr.json() : null,
+    lr.ok ? lr.json() : null,
+  ]))
+  .then(([configData, levelsData]) => {
+    if (configData) CONFIG = configData;
+    if (levelsData && Array.isArray(levelsData.levels) && levelsData.levels.length > 0) {
+      LEVELS = levelsData.levels;
+    }
+  })
   .catch(() => {}); // silencieux : on garde les valeurs par défaut
 
 const TURN_RATE = () => CONFIG.ship.turnRate;
@@ -119,20 +134,34 @@ const SPRITES = [
   },
 ];
 
-function createBlocks(count, width, height, baseSpeed = BASE_BLOCK_SPEED()) {
+// Générateur pseudo-aléatoire déterministe (mulberry32) : même graine → même suite de nombres.
+// Utilisé pour placer les blocs et astéroïdes d'un niveau au MÊME endroit à chaque partie,
+// afin que le joueur s'entraîne dans des conditions identiques.
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function createBlocks(count, width, height, baseSpeed = BASE_BLOCK_SPEED(), rng = Math.random) {
   const blocks = [];
   let attempts = 0;
   while (blocks.length < count && attempts < 500) {
     attempts++;
-    const sprite = SPRITES[Math.floor(Math.random() * SPRITES.length)];
+    const sprite = SPRITES[Math.floor(rng() * SPRITES.length)];
     const frame = sprite.frames[0];
     const rows = frame.length;
     const cols = frame[0].length;
     const w = cols * CELL_SIZE();
     const h = rows * CELL_SIZE();
 
-    const x = Math.random() * (width - w);
-    const y = Math.random() * (height - h);
+    const x = rng() * (width - w);
+    const y = rng() * (height - h);
 
     const overlaps = blocks.some((b) => {
       const bw = b.cols * CELL_SIZE();
@@ -150,14 +179,14 @@ function createBlocks(count, width, height, baseSpeed = BASE_BLOCK_SPEED()) {
       cells,
       cols,
       rows,
-      dir: Math.random() * Math.PI * 2,
+      dir: rng() * Math.PI * 2,
       speed: baseSpeed,
       baseSpeed,
       cellsInitiales,
       spriteName: sprite.name,
       frameIndex: 0,
-      nextDirChange: 2000 + Math.random() * 3000, // ms avant le prochain changement de direction
-      nextShot: performance.now() + 1500 + Math.random() * 2000, // prochain tir ennemi
+      nextDirChange: 2000 + rng() * 3000, // ms avant le prochain changement de direction
+      nextShot: performance.now() + 1500 + rng() * 2000, // prochain tir ennemi
     });
   }
   return blocks;
@@ -169,15 +198,14 @@ function handleKeyDown(e) {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
     e.preventDefault();
   }
-  // Utiliser e.code pour Space (e.key peut être vide selon le navigateur)
-  const key = e.code === 'Space' ? 'Space' : e.key;
-  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(key)) {
-    keys.add(key);
-  }
+  // Utiliser e.code partout : e.key peut être vide ou différent selon le navigateur
+  // (ex. "1" vs "Digit1", pavé numérique, etc.)
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].includes(e.code)) return;
+  keys.add(e.code);
 }
 function handleKeyUp(e) {
-  const key = e.code === 'Space' ? 'Space' : e.key;
-  keys.delete(key);
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].includes(e.code)) return;
+  keys.delete(e.code);
 }
 // Écouteurs sur document pour capter les touches même si le focus est sur le canvas
 document.addEventListener('keydown', handleKeyDown);
@@ -190,7 +218,7 @@ const ship = { x: 0, y: 0, angle: -Math.PI / 2, speed: 0 };
 ship.x = canvas.width / 2;
 ship.y = canvas.height / 2;
 
-let blocks = createBlocks(8, canvas.width, canvas.height);
+let blocks = []; // initialisé par spawnLevel() (graine déterministe par niveau)
 let bullets = [];
 let enemyBullets = []; // tirs des invaders
 let powerups = []; // items de tir à collecter
@@ -213,8 +241,11 @@ let score = 0;
 let lastShot = -Infinity; // initialisé à -Infinity pour ne pas bloquer le premier tir
 let gameOver = false;
 let gameStarted = false; // écran de démarrage affiché
-let level = 1; // niveau courant
+let level = 1; // niveau courant (1..TOTAL_LEVELS)
 let destroyedThisLevel = 0; // nombre d'ennemis détruits au niveau courant
+let levelStartTime = 0; // horodatage du début du niveau courant (pour les powerups planifiés)
+let spawnedPowerupIdx = 0; // index du prochain powerup planifié du niveau courant
+let allLevelsCleared = false; // tous les niveaux terminés
 let lives = CONFIG.powerups.livesStart; // vies restantes
 const MAX_LIVES = () => CONFIG.powerups.livesMax;
 let shipExploding = false; // animation d'explosion du vaisseau en cours
@@ -296,30 +327,55 @@ let lastAsteroidSpawn = 0;
 const ASTEROID_SPAWN_INTERVAL = () => CONFIG.asteroids.spawnInterval;
 let explosions = []; // particules d'explosion {x, y, vx, vy, life, color}
 
-// Nombre d'astéroïdes à faire apparaître au niveau courant (augmente avec le niveau)
+// Difficulté choisie au démarrage ('facile', 'normal' ou 'difficile')
+let difficulty = 'normal';
+
+// Définition du niveau courant (levels.json) ; repli sur les formules par défaut si absent
+function levelDef(lvl) {
+  const def = LEVELS[lvl - 1];
+  if (def) {
+    // Nombre d'invaders selon la difficulté choisie (progression différente par mode)
+    const blocks = def['blocks_' + difficulty] !== undefined ? def['blocks_' + difficulty] : blockCountForLevel(lvl);
+    return {
+      blocks,
+      blockSpeed: def.blockSpeed,
+      asteroids: def.asteroids,
+      powerups: def.powerups || [],
+    };
+  }
+  return {
+    blocks: blockCountForLevel(lvl),
+    blockSpeed: baseSpeedForLevel(lvl),
+    asteroids: Math.min(2 + lvl, 10),
+    powerups: [],
+  };
+}
+
+// Nombre d'astéroïdes à faire apparaître au niveau courant (défini dans levels.json)
 function asteroidCountForLevel(lvl) {
-  return Math.min(2 + lvl, 10); // niveau 1 = 3, niveau 2 = 4, ... max 10
+  return levelDef(lvl).asteroids;
 }
 
 // Crée un astéroïde avec n divisions restantes avant explosion.
 // La taille dépend de n : n = ASTEROID_MAX_DIVISIONS() → très grand, n = 1 → petit.
-function createAsteroid(n, x, y) {
+// rng : générateur aléatoire (déterministe si fourni) pour la position, la direction et la forme.
+function createAsteroid(n, x, y, rng = Math.random) {
   const sizeIndex = ASTEROID_MAX_DIVISIONS() - n; // n=4 → 0, n=3 → 1, n=2 → 2, n=1 → 3
   const r = ASTEROID_SIZES()[sizeIndex];
   const speed = ASTEROID_BASE_SPEED() * (1 + sizeIndex * 0.3); // les petits sont un peu plus rapides
-  const dir = Math.random() * Math.PI * 2;
+  const dir = rng() * Math.PI * 2;
   return {
-    x: x !== undefined ? x : Math.random() * canvas.width,
+    x: x !== undefined ? x : rng() * canvas.width,
     y: y !== undefined ? y : -r, // apparaît au-dessus de l'écran par défaut
     r,
     n, // divisions restantes avant explosion
     sizeIndex,
     vx: Math.cos(dir) * speed,
     vy: Math.sin(dir) * speed,
-    rot: Math.random() * Math.PI * 2,
-    rotSpeed: (Math.random() - 0.5) * 2, // rad/s
+    rot: rng() * Math.PI * 2,
+    rotSpeed: (rng() - 0.5) * 2, // rad/s
     // Forme irrégulière pré-générée (décalages radiaux)
-    spikes: Array.from({ length: 10 }, () => 0.75 + Math.random() * 0.5),
+    spikes: Array.from({ length: 10 }, () => 0.75 + rng() * 0.5),
   };
 }
 
@@ -330,11 +386,14 @@ function spawnAsteroid(now) {
   asteroids.push(createAsteroid(ASTEROID_MAX_DIVISIONS())); // n = 4 → très grand
 }
 
-// Fait apparaître le nombre d'astéroïdes correspondant au niveau courant
+// Fait apparaître le nombre d'astéroïdes correspondant au niveau courant.
+// Les positions et formes sont déterministes par niveau (graine = id du niveau),
+// pour que le joueur s'entraîne toujours dans les mêmes conditions.
 function spawnAsteroidsForLevel() {
   const count = asteroidCountForLevel(level);
+  const rng = mulberry32(1000 + level * 97); // graine dédiée aux astéroïdes du niveau
   for (let i = 0; i < count && asteroids.length < MAX_ASTEROIDS(); i++) {
-    asteroids.push(createAsteroid(ASTEROID_MAX_DIVISIONS())); // n = 4 → très grand
+    asteroids.push(createAsteroid(ASTEROID_MAX_DIVISIONS(), undefined, undefined, rng)); // n = 4 → très grand
   }
 }
 
@@ -441,21 +500,47 @@ function drawAsteroids() {
   }
 }
 
-// Nombre de blocs par niveau
+// Nombre de blocs par niveau (formule par défaut si levels.json n'est pas chargé)
 function blockCountForLevel(lvl) {
   return CONFIG.blocks.countBase + (lvl - 1) * CONFIG.blocks.countPerLevel;
 }
 
-// Vitesse de base des blocs augmente avec le niveau
+// Vitesse de base des blocs augmente avec le niveau (formule par défaut)
 function baseSpeedForLevel(lvl) {
   return BASE_BLOCK_SPEED() * (1 + (lvl - 1) * CONFIG.level.speedMultiplierPerLevel);
 }
 
 function spawnLevel() {
-  const count = blockCountForLevel(level);
-  const base = baseSpeedForLevel(level);
+  const def = levelDef(level);
   destroyedThisLevel = 0;
-  blocks = createBlocks(count, canvas.width, canvas.height, base);
+  spawnedPowerupIdx = 0;
+  levelStartTime = performance.now();
+  // Graine déterministe par niveau : mêmes invaders (positions, sprites, directions) à chaque partie
+  const rng = mulberry32(42 + level * 131);
+  blocks = createBlocks(def.blocks, canvas.width, canvas.height, def.blockSpeed, rng);
+}
+
+// Fait apparaître les powerups planifiés du niveau courant au moment indiqué dans levels.json
+function updatePlannedPowerups(now) {
+  const def = levelDef(level);
+  while (spawnedPowerupIdx < def.powerups.length && now - levelStartTime >= def.powerups[spawnedPowerupIdx].at) {
+    spawnPlannedPowerup(def.powerups[spawnedPowerupIdx].type, spawnedPowerupIdx);
+    spawnedPowerupIdx++;
+  }
+}
+
+// Powerup planifié d'un type donné : position déterministe par niveau et index
+// (mêmes conditions à chaque partie sur le même niveau)
+function spawnPlannedPowerup(type, seedIdx = 0) {
+  if (powerups.length >= MAX_POWERUPS()) return;
+  const rng = mulberry32(7000 + level * 53 + seedIdx * 7);
+  powerups.push({
+    x: 50 + rng() * (canvas.width - 100),
+    y: 50 + rng() * (canvas.height - 100),
+    r: 14,
+    pulse: 0,
+    type,
+  });
 }
 
 // Accélère tous les blocs quand un ennemi est détruit
@@ -980,8 +1065,11 @@ function drawRespawnWaves() {
 }
 
 function update(dt, now) {
-  // Écran de démarrage : attendre Space pour commencer
+  // Écran de démarrage : choisir la difficulté (1/2/3) puis Space pour commencer
   if (!gameStarted) {
+    if (keys.has('Digit1') || keys.has('Numpad1')) difficulty = 'facile';
+    else if (keys.has('Digit2') || keys.has('Numpad2')) difficulty = 'normal';
+    else if (keys.has('Digit3') || keys.has('Numpad3')) difficulty = 'difficile';
     if (keys.has('Space')) {
       gameStarted = true;
       resetGame();
@@ -1039,11 +1127,19 @@ function update(dt, now) {
   enemyShoot(now);
   updateEnemyBullets(dt);
 
+  // Powerups planifiés du niveau courant (levels.json)
+  updatePlannedPowerups(now);
+
   // Niveau suivant quand plus aucun ennemi ne reste
-  if (blocks.length === 0) {
-    level++;
-    spawnLevel();
-    spawnAsteroidsForLevel(); // fait apparaître plus d'astéroïdes au niveau supérieur
+  if (blocks.length === 0 && !allLevelsCleared) {
+    if (level >= TOTAL_LEVELS()) {
+      // Tous les niveaux terminés : on reste sur le dernier niveau (entraînement libre)
+      allLevelsCleared = true;
+    } else {
+      level++;
+      spawnLevel();
+      spawnAsteroidsForLevel(); // fait apparaître les astéroïdes du nouveau niveau
+    }
   }
 
   // Collision vaisseau ↔ blocs : explosion du vaisseau
@@ -1089,8 +1185,44 @@ function resetGame() {
   gameOver = false;
   gameStarted = true; // le jeu a commencé
   level = 1;
+  allLevelsCleared = false;
   spawnLevel();
   spawnAsteroidsForLevel(); // fait apparaître les astéroïdes du niveau 1
+}
+
+// Démarre directement un niveau donné (entraînement sur une configuration précise)
+function startLevel(n, diff) {
+  if (diff && ['facile', 'normal', 'difficile'].includes(diff)) difficulty = diff;
+  const target = Math.max(1, Math.min(n, TOTAL_LEVELS()));
+  ship.x = canvas.width / 2;
+  ship.y = canvas.height / 2;
+  ship.angle = -Math.PI / 2;
+  ship.speed = 0;
+  keys.clear();
+  bullets = [];
+  enemyBullets = [];
+  powerups = [];
+  waves = [];
+  respawnWaves = [];
+  asteroids = [];
+  explosions = [];
+  lastAsteroidSpawn = 0;
+  currentWeapon = 'bullet';
+  bulletAmmo = CONFIG.weapons.bullet.startAmmo;
+  waveAmmo = CONFIG.weapons.wave.startAmmo;
+  bulletStreams = CONFIG.weapons.bullet.parallelStreams;
+  waveLevel = 1;
+  lives = CONFIG.powerups.livesStart;
+  shipExploding = false;
+  shipExplosionTimer = 0;
+  score = 0;
+  lastShot = -Infinity;
+  gameOver = false;
+  gameStarted = true;
+  level = target;
+  allLevelsCleared = false;
+  spawnLevel();
+  spawnAsteroidsForLevel();
 }
 
 function drawShip() {
@@ -1389,12 +1521,29 @@ function drawHUD() {
       ctx.fillText(historyText, (canvas.width - tw4) / 2, canvas.height / 2 + 30);
     }
 
+    // Choix de la difficulté (touches 1/2/3), puis ESPACE pour commencer
+    if (LEVELS.length > 0) {
+      ctx.font = 'bold 20px monospace';
+      const diffLabels = { facile: '1. Facile', normal: '2. Normal', difficile: '3. Difficile' };
+      let dx = canvas.width / 2 - 260;
+      for (const d of ['facile', 'normal', 'difficile']) {
+        const label = diffLabels[d] + (difficulty === d ? ' ✓' : '');
+        ctx.fillStyle = difficulty === d ? '#33ff66' : '#aaaaaa';
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = 8;
+        ctx.fillText(label, dx, canvas.height * 0.58);
+        dx += ctx.measureText(label).width + 40;
+      }
+    }
+
     // Instruction
     ctx.font = 'bold 18px monospace';
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = '#ffffff';
     ctx.shadowBlur = 8;
-    const instruction = 'Appuyez sur ESPACE pour commencer';
+    const instruction = LEVELS.length > 0
+      ? `Touches 1/2/3 : difficulté — ESPACE pour commencer (${TOTAL_LEVELS()} niveaux)`
+      : 'Appuyez sur ESPACE pour commencer';
     const tw5 = ctx.measureText(instruction).width;
     ctx.fillText(instruction, (canvas.width - tw5) / 2, canvas.height * 0.7);
 
@@ -1419,9 +1568,9 @@ function drawHUD() {
   ctx.fillText(bestText, x, y);
   x += ctx.measureText(bestText).width + 24;
 
-  // Niveau
+  // Niveau (numéro sur total)
   ctx.fillStyle = '#33ff66';
-  const levelText = `Niveau: ${level}`;
+  const levelText = allLevelsCleared ? `Niveau: ${level}/${TOTAL_LEVELS()} ✓` : `Niveau: ${level}/${TOTAL_LEVELS()}`;
   ctx.fillText(levelText, x, y);
   x += ctx.measureText(levelText).width + 24;
 
@@ -1608,6 +1757,10 @@ window.__debug = {
       }
     }
   },
+  // Permet aux tests de retirer immédiatement un bloc du tableau (dévient le niveau suivant)
+  removeBlock(index) {
+    if (blocks[index]) blocks.splice(index, 1);
+  },
   // Permet aux tests de tirer une balle instantanément (sans attendre la frame suivante)
   fireBullet() {
     bullets.push({
@@ -1658,8 +1811,50 @@ window.__debug = {
     lastShot = -Infinity;
     gameOver = false;
     level = 1;
+    allLevelsCleared = false;
     spawnLevel();
     spawnAsteroidsForLevel(); // fait apparaître les astéroïdes du niveau 1
+  },
+  // Permet aux tests de démarrer directement un niveau donné (entraînement)
+  startLevel(n, diff) {
+    startLevel(n, diff);
+  },
+  get totalLevels() {
+    return TOTAL_LEVELS();
+  },
+  get allLevelsCleared() {
+    return allLevelsCleared;
+  },
+  get currentLevelDef() {
+    const def = LEVELS[level - 1];
+    if (!def) return null;
+    return {
+      id: def.id,
+      blocks: levelDef(level).blocks, // selon la difficulté courante
+      blockSpeed: def.blockSpeed,
+      asteroids: def.asteroids,
+      powerups: (def.powerups || []).map((p) => ({ at: p.at, type: p.type })),
+    };
+  },
+  get difficulty() {
+    return difficulty;
+  },
+  setDifficulty(d) {
+    if (['facile', 'normal', 'difficile'].includes(d)) difficulty = d;
+  },
+  get levelStartTime() {
+    return levelStartTime;
+  },
+  get spawnedPowerupIdx() {
+    return spawnedPowerupIdx;
+  },
+  // Positions des blocs courants (pour vérifier la détermination par niveau)
+  get blockPositions() {
+    return blocks.map((b) => ({ x: Math.round(b.x), y: Math.round(b.y), spriteName: b.spriteName }));
+  },
+  // Positions des astéroïdes courants (pour vérifier la détermination par niveau)
+  get asteroidPositions() {
+    return asteroids.map((a) => ({ x: Math.round(a.x), y: Math.round(a.y), r: a.r, n: a.n }));
   },
   get asteroids() {
     return asteroids.map((a) => ({

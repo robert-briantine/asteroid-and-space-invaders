@@ -5,6 +5,6 @@ export default defineConfig({
   timeout: 30_000,
   workers: 1,
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:3666',
   },
 });

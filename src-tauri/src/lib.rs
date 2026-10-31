@@ -10,6 +10,7 @@ use std::path::PathBuf;
 const INDEX_HTML: &str = include_str!("../../public/index.html");
 const MAIN_JS: &str = include_str!("../../public/main.js");
 const CONFIG_JSON: &str = include_str!("../../public/config.json");
+const LEVELS_JSON: &str = include_str!("../../public/levels.json");
 
 // Structure pour les scores
 #[derive(Serialize, Deserialize, Clone)]
@@ -79,6 +80,7 @@ fn get_content(path: &str) -> Option<(&'static str, &'static str)> {
     "/" | "/index.html" => Some((INDEX_HTML, "text/html")),
     "/main.js" => Some((MAIN_JS, "application/javascript")),
     "/config.json" => Some((CONFIG_JSON, "application/json")),
+    "/levels.json" => Some((LEVELS_JSON, "application/json")),
     _ => None,
   }
 }

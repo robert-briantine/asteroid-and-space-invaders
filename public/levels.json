@@ -1,0 +1,325 @@
+{
+  "total": 20,
+  "levels": [
+    {
+      "id": 1,
+      "blockSpeed": 40,
+      "asteroids": 3,
+      "powerups": [
+        {
+          "at": 15000,
+          "type": "bullet"
+        }
+      ],
+      "blocks_facile": 4,
+      "blocks_normal": 4,
+      "blocks_difficile": 4
+    },
+    {
+      "id": 2,
+      "blockSpeed": 50,
+      "asteroids": 4,
+      "powerups": [
+        {
+          "at": 15000,
+          "type": "wave"
+        }
+      ],
+      "blocks_facile": 6,
+      "blocks_normal": 6,
+      "blocks_difficile": 6
+    },
+    {
+      "id": 3,
+      "blockSpeed": 60,
+      "asteroids": 5,
+      "powerups": [
+        {
+          "at": 15000,
+          "type": "life"
+        }
+      ],
+      "blocks_facile": 8,
+      "blocks_normal": 8,
+      "blocks_difficile": 8
+    },
+    {
+      "id": 4,
+      "blockSpeed": 70,
+      "asteroids": 6,
+      "powerups": [
+        {
+          "at": 12000,
+          "type": "bullet"
+        },
+        {
+          "at": 30000,
+          "type": "wave"
+        }
+      ],
+      "blocks_facile": 10,
+      "blocks_normal": 10,
+      "blocks_difficile": 10
+    },
+    {
+      "id": 5,
+      "blockSpeed": 80,
+      "asteroids": 7,
+      "powerups": [
+        {
+          "at": 12000,
+          "type": "wave"
+        }
+      ],
+      "blocks_facile": 12,
+      "blocks_normal": 12,
+      "blocks_difficile": 12
+    },
+    {
+      "id": 6,
+      "blockSpeed": 90,
+      "asteroids": 8,
+      "powerups": [
+        {
+          "at": 12000,
+          "type": "bullet"
+        },
+        {
+          "at": 30000,
+          "type": "life"
+        }
+      ],
+      "blocks_facile": 14,
+      "blocks_normal": 14,
+      "blocks_difficile": 14
+    },
+    {
+      "id": 7,
+      "blockSpeed": 100,
+      "asteroids": 9,
+      "powerups": [
+        {
+          "at": 12000,
+          "type": "wave"
+        },
+        {
+          "at": 30000,
+          "type": "bullet"
+        }
+      ],
+      "blocks_facile": 16,
+      "blocks_normal": 16,
+      "blocks_difficile": 16
+    },
+    {
+      "id": 8,
+      "blockSpeed": 110,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 10000,
+          "type": "wave"
+        }
+      ],
+      "blocks_facile": 18,
+      "blocks_normal": 18,
+      "blocks_difficile": 18
+    },
+    {
+      "id": 9,
+      "blockSpeed": 120,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 10000,
+          "type": "bullet"
+        },
+        {
+          "at": 25000,
+          "type": "wave"
+        }
+      ],
+      "blocks_facile": 20,
+      "blocks_normal": 20,
+      "blocks_difficile": 20
+    },
+    {
+      "id": 10,
+      "blockSpeed": 130,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 10000,
+          "type": "life"
+        }
+      ],
+      "blocks_facile": 22,
+      "blocks_normal": 22,
+      "blocks_difficile": 22
+    },
+    {
+      "id": 11,
+      "blockSpeed": 140,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 10000,
+          "type": "wave"
+        },
+        {
+          "at": 25000,
+          "type": "bullet"
+        }
+      ],
+      "blocks_facile": 24,
+      "blocks_normal": 24,
+      "blocks_difficile": 24
+    },
+    {
+      "id": 12,
+      "blockSpeed": 150,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 10000,
+          "type": "bullet"
+        }
+      ],
+      "blocks_facile": 26,
+      "blocks_normal": 26,
+      "blocks_difficile": 26
+    },
+    {
+      "id": 13,
+      "blockSpeed": 160,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 10000,
+          "type": "wave"
+        }
+      ],
+      "blocks_facile": 26,
+      "blocks_normal": 28,
+      "blocks_difficile": 28
+    },
+    {
+      "id": 14,
+      "blockSpeed": 170,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 8000,
+          "type": "bullet"
+        },
+        {
+          "at": 20000,
+          "type": "wave"
+        }
+      ],
+      "blocks_facile": 26,
+      "blocks_normal": 30,
+      "blocks_difficile": 30
+    },
+    {
+      "id": 15,
+      "blockSpeed": 180,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 8000,
+          "type": "life"
+        }
+      ],
+      "blocks_facile": 26,
+      "blocks_normal": 32,
+      "blocks_difficile": 32
+    },
+    {
+      "id": 16,
+      "blockSpeed": 190,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 8000,
+          "type": "wave"
+        },
+        {
+          "at": 20000,
+          "type": "bullet"
+        }
+      ],
+      "blocks_facile": 26,
+      "blocks_normal": 34,
+      "blocks_difficile": 34
+    },
+    {
+      "id": 17,
+      "blockSpeed": 200,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 8000,
+          "type": "bullet"
+        }
+      ],
+      "blocks_facile": 26,
+      "blocks_normal": 36,
+      "blocks_difficile": 36
+    },
+    {
+      "id": 18,
+      "blockSpeed": 210,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 8000,
+          "type": "wave"
+        }
+      ],
+      "blocks_facile": 26,
+      "blocks_normal": 38,
+      "blocks_difficile": 38
+    },
+    {
+      "id": 19,
+      "blockSpeed": 220,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 8000,
+          "type": "bullet"
+        },
+        {
+          "at": 20000,
+          "type": "life"
+        }
+      ],
+      "blocks_facile": 26,
+      "blocks_normal": 40,
+      "blocks_difficile": 40
+    },
+    {
+      "id": 20,
+      "blockSpeed": 230,
+      "asteroids": 10,
+      "powerups": [
+        {
+          "at": 8000,
+          "type": "wave"
+        },
+        {
+          "at": 20000,
+          "type": "bullet"
+        },
+        {
+          "at": 35000,
+          "type": "life"
+        }
+      ],
+      "blocks_facile": 26,
+      "blocks_normal": 40,
+      "blocks_difficile": 42
+    }
+  ]
+}
